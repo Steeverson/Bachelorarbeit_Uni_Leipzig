@@ -15,7 +15,7 @@ Passwort: toor
 
 Dokumente liegen in: /Dokumente/Bachelorarbeit_Uni_Leipzig
 
-## Vorbereitung Suricata
+## Vorbereitung Suricata (Nur notwendig wenn OVA nicht importiert wurde)
 
 Innerhalb der Datei /etc/suricata/suricata.yaml:
 - unter **vars** -> **port-groups** einfügen:
