@@ -10,6 +10,7 @@ Alternativ kann eine vorbereitete OVA Datei unter:
 heruntergeladen werden. Diese ist vorkonfiguriert und kann in Virtual Box importiert werden.
 
 Benutzername: BAUser
+
 Passwort: toor
 
 Dokumente liegen in: /Dokumente/Bachelorarbeit_Uni_Leipzig
