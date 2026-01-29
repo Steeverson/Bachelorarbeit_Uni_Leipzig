@@ -5,8 +5,14 @@
 - Auf VM Suricata installiert
 - Auf VM Docker installiert
 
+## Herunterladen der vorbereiteten Virtuellen Maschine:
 Alternativ kann eine vorbereitete OVA Datei unter: 
 heruntergeladen werden. Diese ist vorkonfiguriert und kann in Virtual Box importiert werden.
+
+Benutzername: BAUser
+Passwort: toor
+
+Dokumente liegen in: /Dokumente/Bachelorarbeit_Uni_Leipzig
 
 ## Vorbereitung Suricata
 
