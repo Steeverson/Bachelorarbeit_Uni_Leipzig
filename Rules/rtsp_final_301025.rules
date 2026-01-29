@@ -1,0 +1,76 @@
+
+#RTSP2
+#Einfache Regel, aber nur in spezialisierten RTSP Sätzen so zu finden.
+#FP Risiko: Mittel Legitimes publishing, regestry in internen Systemen
+#Zukünfitg eventuell Flowbits oder Authcontext ergänzen
+alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"RTSP ANNOUNCE – möglicher Publish/Stream-Hijack"; flow:to_server,established; content:"ANNOUNCE rtsp"; nocase; fast_pattern; content:" RTSP/1."; nocase; classtype:policy-violation; sid:9000001; rev:3;)
+
+#RTSP3
+#Komplexität: Moderat, selten in Regelsätzen abgedeckt
+#FP Risiko: Gering
+alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"RTSP SETUP mit interleaved TCP (RTP/AVP/TCP)"; flow:to_server,established; content:"SETUP "; offset:0; depth:6; nocase; content:"Transport:"; nocase; content:"RTP/AVP/TCP"; nocase; classtype:attempted-recon; sid:9000002; rev:1;)
+
+#RTSP4
+#Komplexität: Gering, klassiche Threshold Regel
+#Müsste auf RealWorld angepasst und erprobt werden
+alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"RTSP Recon: viele DESCRIBE in kurzer Zeit"; flow:to_server,established; content:"DESCRIBE "; offset:0; depth:9; nocase; content:" RTSP/1."; nocase; threshold:type both, track by_src, count 5, seconds 60; classtype:attempted-recon; sid:9000003; rev:1;)
+
+
+
+
+alert tcp $EXTERNAL_NET any -> $HOME_NET [23,2323] (msg:"IoT Telnet Login Brute-Force/Default-Kennwort"; flow:to_server, established; content:"root"; content:"Password:"; classtype:attempted-admin; sid:9000012; rev:11;)
+
+
+
+alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (msg:"MVPower DVR Backdoor-Zugriff (/shell)"; flow:to_server, established; http.uri; content:"/shell"; reference:cve,2016-20016; classtype:attempted-admin; sid:9000013; rev:2;)
+alert tcp $HOME_NET any -> $HOME_NET [23,2323] (msg:"IoT Telnet Portscan (source internal) (Mirai)"; flags:S; threshold: type both, track by_src, count 5, seconds 60; classtype:attempted-recon; sid:9000014; rev:1;)
+alert udp $HOME_NET any -> $EXTERNAL_NET any (msg:"IoT moeglicher UDP-Flood (DDoS-Bot)"; threshold: type both, track by_src, count 100, seconds 1; classtype:attempted-dos; sid:9000015; rev:1;)
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"Internes Portscan durch IoT-Geraet"; flags:S; threshold: type both, track by_src, count 10, seconds 60; classtype:attempted-recon; sid:9000016; rev:1;)
+alert tcp $HOME_NET any -> $EXTERNAL_NET [80,443,21] (msg:"IoT Malware-Download (verdächtige Datei)"; flow:to_server; content:".sh HTTP/1.1"; nocase; content:"Host: "; distance:0; within:50; classtype:trojan-activity; sid:9000018; rev:1;)
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"D-Link DSL-2750B login.cgi Command Injection"; flow:to_server; content:"/login.cgi?"; http.uri; pcre:"/cli=.*(?:|3B||%3[Bb]|%26)/U"; classtype:web-application-attack; sid:9000021; rev:13;)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (msg:"Dasan GPON Auth-Bypass ?images"; flow:to_server; http.uri; content:"?images"; nocase; reference:cve,2018-10561; classtype:attempted-admin; sid:9000022; rev:1;)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 7547 (msg:"TR-064 NewNTPServer Command Injection"; flow:to_server, established; content:"NewNTPServer"; nocase; content:"http://"; distance:0; classtype:attempted-admin; sid:9000023; rev:2;)
+alert udp $EXTERNAL_NET any -> $HOME_NET 1900 (msg:"Externes SSDP M-SEARCH (UPnP-Scan)"; content:"M-SEARCH * HTTP/1.1"; nocase; classtype:attempted-recon; sid:9000024; rev:1;)
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"IoT RCE-Versuch TOTOLINK A3000RU (downloadFlile.cgi) CVE-2022-25075"; flow:to_server, established; http.uri; content:"/cgi-bin/downloadFlile.cgi"; http.uri; content:"payload="; http.uri; pcre:"/payload=(?:&[`|3B|]|&%60)/Ui"; classtype:attempted-admin; sid:9000025; rev:1;)
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"IoT RCE-Versuch TOTOLINK N600R (cstecgi.cgi) CVE-2022-26186"; flow:to_server, established; http.uri; content:"/cgi-bin/cstecgi.cgi"; http.uri; content:"exportOvpn"; http.uri; content:"comand="; http.uri; content:"|3B|"; classtype:attempted-admin; sid:9000026; rev:1;)
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"IoT RCE-Versuch Razer Sila Router (UBUS JSON) CVE-2022-29013"; flow:to_server,established; content:"POST"; http.method; content:"/ubus/"; http.uri; pkt_data; pcre:"/\"file\"\s*,\s*\"exec\"/U"; pcre:"/\"command\"\s*:\s*\"/U"; classtype:attempted-admin; sid:9000027; rev:4;)
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"IoT RCE-Versuch Zyxel ZTP (setWanPortSt) CVE-2022-30525"; flow:to_server, established; http.method; content:"POST"; http.uri; content:"/ztp/cgi-bin/handler"; http.request_body; content:"setWanPortSt"; http.request_body; content:"mtu"; http.request_body; pcre:"/mtu['"]s:s['"]s*0-9+/i"; classtype:attempted-admin; sid:9000028; rev:1;)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (msg:"IoT RCE-Versuch TP-Link Archer AX21 (country Param) CVE-2023-1389"; flow:to_server, established; http.uri; content:"country="; http.uri; pcre:"/country=.*(|3B||`)/"; classtype:attempted-admin; sid:9000095; rev:1;)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (msg:"IoT RCE-Versuch Tenda AC18 (WriteFacMac) CVE-2022-31446"; flow:to_server, established; http.uri; content:"/goform/WriteFacMac"; http.uri; content:"mac="; http.uri; pcre:"/mac=[0-9A-F:%-]+[`|3B|]/"; classtype:attempted-admin; sid:9000031; rev:1;)
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg: "IoT-Router – TOTOLINK DownloadFlile.cgi Command Injection (CVE-2022-25082)"; flow: to_server, established; content: "GET /cgi-bin/downloadFlile.cgi"; http_request_line; content: "?"; http_request_line; pcre: "/|3B||&/"; http_request_line; sid:1000032; rev:1;)
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"IoT-Router - TOTOLINK UpgradeFW Command Injection (CVE-2022-26210)"; flow:to_server,established; content:"POST /cgi-bin/cstecgi.cgi"; http_request_line; content:"fun=setUpgradeFW"; http_request_line; pkt_data; pcre:"/fw_url=.*(?:\|\|||3B||`)/U"; classtype:attempted-admin; sid:1000033; rev:2;)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 443 (msg:"IoT-Router - TP-Link Archer AX21 Country-Code RCE (CVE-2023-1389)"; flow:to_server,established; content:"POST /cgi-bin/luci/|3B|stok="; http_request_line; content:"/locale?form=country"; http_request_line; pkt_data; pcre:"/country=.*(?:&%3B|&|3B|||3B||`|%60)/U"; classtype:attempted-admin; sid:1000034; rev:2;)
+#alert http $EXTERNAL_NET any -> $HOME_NET any (msg: "IoT-Energy – APSystems ECU-R timezone Command Injection (CVE-2022-45699)"; flow: to_server, established; content: "timezone="; http_client_body; pcre: "/timezone=(?:&%3B|&|3B|)/"; sid:1000035; rev:1; )
+#alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"IoT-Router – Tenda AX3 lanIp Parameter RCE (CVE-2023-27240)"; flow:to_server,established; content:"POST "; http_method; content:"/goform/AdvSetLanip"; http_uri; http_client_body; content:"lanIp="; http_client_body; pcre:"/lanIp=.*(?:%26|%3B||3B||`|%60)/U"; sid:9000035; rev:2;)
+#alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"IoT-Router – D-Link DIR-820L ping_addr RCE (CVE-2023-25280)"; flow:to_server,established; content:"POST "; http_method; content:"/ping.ccp"; http_uri; http_client_body; content:"ping_addr="; http_client_body; pcre:"/ping_addr=.*(?:%26|%3B||3B||%7C|\||`|%60)/U"; sid:1000036; rev:2;)
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"IoT Web-Login mit Default-Passwort (BasicAuth)"; flow:to_server, established; content:"Authorization: Basic "; content:"YWRtaW46YWRtaW4="; classtype:attempted-admin; sid:9000037; rev:1;)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (msg:"IP-Cam Config Leak (system.ini Download)"; flow:to_server; content:"GET system.ini HTTP/1.1"; nocase; classtype:attempted-recon; sid:9000039; rev:1;)
+alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"Mehrfache HTTP-Auth-Fehler - Bruteforce moeglich"; flow:to_client; content:"HTTP/1.1 401"; flowbits:set,auth.fail; threshold: type both, track by_src, count 5, seconds 120; classtype:attempted-user; sid:9000040; rev:1;)
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"IoT RCE-Versuch FLIR AX8 (res.php Alarm) CVE-2022-37061"; flow:to_server, established; http.uri; content:"/res.php"; http.request_body; content:"action=alarm"; http.request_body; pcre:"/id=[0-9]+|3B|.+/"; classtype:attempted-admin; sid:9000041; rev:1;)
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"IoT RCE-Versuch ABUS Kamera (wireless_mft) CVE-2023-26609"; http.uri; content:"/cgi-bin/mft/wireless_mft"; http.request_body; pcre:"/ap=.*[|3B|`]/"; classtype:attempted-admin; sid:9000042; rev:1;)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (msg: "IoT-Kamera – ONVIF WS-UsernameToken Replay-Angriff (CVE-2022-30563)"; flow: established, to_server; content: "POST"; http_method; content: "/onvif"; http_uri; content: "<CreateUsers"; http_client_body; content: "UsernameToken"; http_client_body; classtype:attempted-admin; sid:1000043; rev:1;)
+#alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"IP-Kamera – FLIR AX8 res.php Command Injection (CVE-2022-37061)"; flow:to_server,established; content:"POST "; http_method; content:"/res.php"; http_uri; http_client_body; content:"action=alarm"; content:"id="; pcre:"/id=[0-9]+(?:%3B|%26|;|&|`|%60)/U"; sid:1000044; rev:2;)
+alert tcp $HOME_NET 1883 -> $HOME_NET any (msg:"MQTT Connect Flood/Bruteforce"; flow:to_server; threshold:type both, track by_src, count 10, seconds 60; classtype:attempted-dos; sid:9000042; rev:2;)
+alert tcp $HOME_NET any -> $HOME_NET 1883 (msg:"MQTT Publish Flood"; flow:to_server; mqtt.type:publish; threshold: type both, track by_src, count 100, seconds 60; classtype:attempted-dos; sid:9000043; rev:1;)
+alert tcp $EXTERNAL_NET any -> $HOME_NET 1883 (msg:"MQTT Protokoll-Anomalie (moeglicher Exploit)"; flow:to_server; classtype:protocol-command-decode; sid:9000044; rev:2;)
+alert udp $EXTERNAL_NET any -> $HOME_NET 5683 (msg:"External CoAP Scan"; content:"|43 4F 41 50|"; depth:4; offset:0; sid:9000045; rev:3;)
+
+
+
+
+
+
+
+
+
+
+
+#Proof of Concept Regeln, möglicherweise löschen oder gesondert betrachten
+##########################################################################
+alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"Proof of Concept: RTSP DESCRIBE request to server (mögliche Recon)"; flow:to_server,established; content:"DESCRIBE "; offset:0; depth:9; nocase; fast_pattern; content:" RTSP/1."; nocase; classtype:attempted-recon; sid:7000001; rev:6;)
+
+#Dopplung zur 9000003. Andere Triggert zuverlässiger als diese fast_pattern Regel
+alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"RTSP Recon: viele DESCRIBE in kurzer Zeit"; flow:to_server,established; content:"DESCRIBE "; offset:0; depth:9; nocase; fast_pattern; content:" RTSP/1."; nocase; threshold:type both, track by_src, count 5, seconds 60; classtype:attempted-recon; sid:700003; rev:3;)
+
+#Klassische Mirai Portscan Regel, sehr verbreitet.
+alert tcp $EXTERNAL_NET any -> $HOME_NET [23,2323] (msg:"IoT Telnet Portscan (source external) (Mirai)"; flow:to_server; flags:S; detection_filter:track by_src,count 5,seconds 60; classtype:attempted-recon; sid:700004; rev:2;)

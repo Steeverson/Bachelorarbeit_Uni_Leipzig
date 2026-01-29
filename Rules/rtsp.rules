@@ -1,0 +1,77 @@
+
+# ------------------------------
+# RTSP
+# ------------------------------
+# RTSP 1
+alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"BA-IDS RTSP: Multiple DESCRIBE requests in short time"; flow:to_server,established; pcre:"/^DESCRIBE\s+\S+\s+RTSP\/1\.\d/i"; threshold:type both, track by_src, count 5, seconds 60; reference:cve,2024-51362; classtype:attempted-recon; sid:9000001; rev:2;)
+# RTSP 2
+alert tcp $HOME_NET $RTSP_PORTS -> $EXTERNAL_NET any (msg:"BA-IDS RTSP: Excessive 400/404 responses"; flow:to_client,established; content:"RTSP/1."; startswith; nocase; fast_pattern; pcre:"/^RTSP\/1\.[01]\s+40[04]\b/i"; detection_filter:track by_dst, count 20, seconds 60; classtype:attempted-recon; sid:9000002; rev:1;)
+# RTSP 3
+alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"BA-IDS RTSP: ANNOUNCE with overlong SDP attribute line"; flow:to_server,established; content:"ANNOUNCE "; startswith; nocase; fast_pattern; pcre:"/a=[A-Za-z0-9_-]{1,20}:[^\r\n]{200,}/Ri"; classtype:attempted-admin; sid:9000003; rev:1;)
+# RTSP 4.1
+#alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"BA-IDS RTSP: Path traversal patterns in request-target (initial access)"; flow:to_server,established; content:"RTSP/1."; nocase; fast_pattern; pcre:"/^(DESCRIBE|PLAY|SETUP|TEARDOWN|ANNOUNCE|OPTIONS)\s+[^\r\n]*(?:\.\./|%2e%2e%2f|%2e%2e%5c|%2e%2e\x5c)/Ri"; classtype:attempted-admin; sid:9000004; rev:1;)
+# RTSP 4
+alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"BA-IDS RTSP: Path traversal patterns in request-target (initial access)";flow:to_server,established;content:"RTSP/1."; nocase; fast_pattern;pcre:"/^(DESCRIBE|PLAY|SETUP|TEARDOWN|ANNOUNCE|OPTIONS)\s+[^\x0d\x0a]*(?:\.\.\/|%2e%2e%2f|%2e%2e%5c|%2e%2e\x5c)/i";classtype:attempted-admin;sid:9000004; rev:2;)
+# RTSP 5
+alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"BA-IDS RTSP: Overlong Session request header value (exploit/probing)"; flow:to_server,established;content:"RTSP/1."; nocase;content:"Session:"; nocase; distance:0; within:200;pcre:"/(?:\r\n|^)\s*(?:Session|X-RTSP-Session):\s*[A-Za-z0-9+\/=]{120,}/smi";classtype:attempted-admin;sid:9000005; rev:2;)
+
+
+# ------------------------------
+# TELNET
+# ------------------------------
+# TELNET 1
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"BA-IDS BACKDOOR/HTTP: MVPower DVR /shell backdoor access (initial access)"; flow:to_server,established; http.method; content:"GET"; nocase; http.uri; content:"/shell"; startswith; nocase; classtype:attempted-admin; reference:cve,2016-20016; sid:9000006; rev:1;)
+# TELNET 2
+alert udp $HOME_NET any -> $EXTERNAL_NET any (msg:"BA-IDS NETWORK/UDP: High-rate UDP burst from IoT host (impact)"; flow:stateless; detection_filter:track by_src, count 100, seconds 1; classtype:attempted-dos; sid:9000007; rev:1;)
+# TELNET 3
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"BA-IDS NETWORK/TCP: Internal SYN scan behavior (reconnaissance)"; flags:S; threshold: type both, track by_src, count 10, seconds 60; classtype:attempted-recon; sid:9000008; rev:1;)
+
+# ------------------------------
+# Router
+# ------------------------------
+# Router 1
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"BA-IDS ROUTER/HTTP: D-Link /login.cgi cli command execution attempt (execution)"; flow:to_server,established; http.uri; content:"/login.cgi"; startswith; nocase; fast_pattern; pcre:"/[?&]cli=[^&\r\n]{1,64}/Ui"; classtype:attempted-admin; reference:cve,2019-20017; sid:9000009; rev:1;)
+# Router 2
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"BA-IDS ROUTER/HTTP: Dasan GPON auth bypass probe via ?images (initial access)"; flow:to_server,established; http.method; content:"GET"; nocase; http.uri; content:"?images"; nocase; fast_pattern; pcre:"/\?images(?:\/|&|$)/Ui"; classtype:attempted-admin; reference:cve,2018-10561; sid:9000010; rev:1;)
+# Router 3
+alert tcp $EXTERNAL_NET any -> $HOME_NET 7547 (msg:"BA-IDS ROUTER/TR-064: Suspicious NewNTPServer URL value (execution)"; flow:to_server,established; content:"<NewNTPServer>"; nocase; fast_pattern; content:"http://"; nocase; distance:0; within:200; classtype:attempted-admin; sid:9000011; rev:1;)
+# Router 4
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"BA-IDS ROUTER/HTTP: TOTOLINK downloadFlile.cgi payload command injection attempt (execution)"; flow:to_server,established; http.method; content:"GET"; nocase; http.uri; content:"/cgi-bin/downloadFlile.cgi"; nocase; fast_pattern; pcre:"/[?&]payload=[^&\r\n]*(?:\;|%3[bB]|%60|`|%7[cC]|\||%26%26|%26|\$\(|%24%28)/Ui"; classtype:attempted-admin; reference:cve,2022-25082; sid:9000012; rev:1;)
+# Router 5
+drop http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"BA-IDS ROUTER/HTTP: TOTOLINK downloadFlile.cgi payload command injection attempt (execution/IPS)"; flow:to_server,established; http.method; content:"GET"; nocase; http.uri; content:"/cgi-bin/downloadFlile.cgi"; nocase; fast_pattern; pcre:"/[?&]payload=[^&\r\n]*(?:\;|%3[bB]|%60|`|%7[cC]|\||%26%26|%26|\$\(|%24%28)/Ui"; classtype:attempted-admin; reference:cve,2022-25082; sid:9000013; rev:1;)
+# Router 6
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"BA-IDS ROUTER/HTTP: TOTOLINK downloadFile.cgi payload command injection attempt (execution)"; flow:to_server,established; http.method; content:"GET"; nocase; http.uri; content:"/cgi-bin/downloadFile.cgi"; nocase; fast_pattern; pcre:"/[?&]payload=[^&\r\n]*(?:\;|%3[bB]|%60|`|%7[cC]|\||%26%26|%26|\$\(|%24%28)/Ui"; classtype:attempted-admin; reference:cve,2022-25082; sid:9000014; rev:1;)
+# Router 7
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"BA-IDS ROUTER/HTTP: TP-Link Archer AX21 country parameter command injection attempt (execution)"; flow:to_server,established; http.uri; content:"country="; nocase; fast_pattern; pcre:"/(?:\?|&)country=[^&\r\n]{0,50}(?:\;|%3[bB]|%60|`|%7[cC]|\||%26%26|%26|\$\(|%24%28)/Ui"; classtype:attempted-admin; reference:cve,2023-1389; sid:9000015; rev:1;)
+# Router 8
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"BA-IDS ROUTER/HTTP: Tenda AC18 WriteFacMac mac parameter command injection attempt (execution)"; flow:to_server,established; http.uri; content:"/goform/WriteFacMac"; nocase; fast_pattern; pcre:"/(?:\?|&)mac=[0-9A-Fa-f:%-]{0,64}(?:\;|%3[bB]|%60|`|%7[cC]|\||%26%26|%26|\$\(|%24%28)/Ui"; classtype:attempted-admin; reference:cve,2022-31446; sid:9000016; rev:1;)
+# Router9
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"BA-IDS ROUTER/HTTP: APSystems ECU-R timezone parameter command injection attempt (execution)"; flow:to_server,established; content:"timezone="; http_client_body; content:"%3B"; http_client_body; nocase; classtype:attempted-admin; sid:9000017; rev:4;)
+
+# ------------------------------
+# IP Camera
+# ------------------------------
+# IP Camera 1
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"BA-IDS CAM/HTTP: Default BasicAuth admin:admin used (credential access)"; flow:to_server,established; http.header; content:"Authorization|3a| Basic "; nocase; fast_pattern; http.header; content:"YWRtaW46YWRtaW4="; nocase; classtype:attempted-admin; sid:9000018; rev:1;)
+# IP Camera 2
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"BA-IDS CAM/HTTP: Unauthenticated /system.ini access (discovery)"; flow:to_server,established; http.method; content:"GET"; nocase; http.uri; content:"/system.ini"; startswith; nocase; classtype:attempted-recon; sid:9000019; rev:1;)
+# IP Camera 3
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"BA-IDS CAM/ONVIF: SOAP CreateUsers observed (persistence)"; flow:to_server,established; http.method; content:"POST"; nocase; http.uri; content:"/onvif/device_service"; startswith; nocase; fast_pattern; http.request_body; content:"<CreateUsers"; nocase; http.request_body; content:"UsernameToken"; nocase; http.request_body; pcre:"/Nonce>[A-Za-z0-9+\/]{30,}={0,2}</Ri"; classtype:attempted-admin; sid:9000020; rev:1;)
+# IP Camera 4
+alert http $EXTERNAL_NET any -> $HOME_NET $HTTP_PORTS (msg:"BA-IDS CAM/HTTP: res.php action=alarm with shell metacharacters (execution)"; flow:to_server,established;content:"/res.php"; nocase; http_uri; content:"POST"; http_method; depth:4;pkt_data;content:"action=alarm"; http.request_body; pcre:"/([\;&`|]\s*\w+|%3[Bb]\s*\w+|%7[Cc]\s*\w+|%60\s*\w+)/i";classtype:attempted-admin;sid:9000021;rev:1;)
+
+# ------------------------------
+# MQTT
+# ------------------------------
+# MQTT 1
+alert tcp $EXTERNAL_NET any -> $HOME_NET 1883 (msg:"BA-IDS MQTT: External CONNECT to broker (initial access)"; flow:to_server,established; app-layer-protocol:mqtt; mqtt.type:CONNECT; classtype:attempted-user; sid:9000022; rev:1;)
+# MQTT 2
+alert tcp $EXTERNAL_NET any -> $HOME_NET 1883 (msg:"BA-IDS MQTT: CONNECT flood from single source (impact)"; flow:to_server,established; app-layer-protocol:mqtt; mqtt.type:CONNECT; detection_filter:track by_src, count 10, seconds 60; classtype:attempted-dos; sid:9000023; rev:1;)
+# MQTT 3
+alert tcp $EXTERNAL_NET any -> $HOME_NET 1883 (msg:"BA-IDS MQTT: Publish to */exec/server with debug exec/run/shell (execution)"; flow:to_server,established; app-layer-protocol:mqtt; mqtt.type:PUBLISH; mqtt.publish.topic; content:"acme/device/"; nocase; fast_pattern; pcre:"/^acme\/device\/[^\x00\/\s]{1,32}\/exec\/server$/i"; mqtt.publish.message; pcre:"/\bdebug\s+(?:exec|run|shell)\b/i"; classtype:attempted-admin; sid:9000024; rev:1;)
+
+# ------------------------------
+# CoAP
+# ------------------------------
+# CoAP 1
+alert udp $EXTERNAL_NET any -> $HOME_NET 5683 (msg:"BA-IDS COAP: POST with cmd= in payload (execution)"; content:"|02|"; offset:1; depth:1; pcre:"/\xFFcmd=[^&\s]{1,30}/R"; classtype:attempted-admin; sid:9000025; rev:1;)

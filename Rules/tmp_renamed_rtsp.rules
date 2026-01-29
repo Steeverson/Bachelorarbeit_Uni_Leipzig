@@ -1,0 +1,168 @@
+#ZU ENTFERNEN, DIESE REGEL IST ZU SENSIBEL
+#RTSP-1
+#Beschreibung: Detektiert eingehende RTSP DESCRIBE-Requests — häufiges Indiz für Recon/Directory Enumeration
+#Typ: attempted-recon — Empfohlen: prüfen ob Quelle legitim ist (z.B. Monitoring). Trigger durch ffprobe/ffmpeg DESCRIBE.
+alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"RTSP DESCRIBE request to server (mögliche Recon)"; flow:to_server,established; content:"DESCRIBE "; offset:0; depth:9; nocase; fast_pattern; content:" RTSP/1."; nocase; classtype:attempted-recon; sid:9000001; rev:2;)
+
+#RTSP-2
+#Beschreibung: Detektiert RECORD-Requests (Publish) — mögliches Hijacking / unautorisertes Publizieren.
+#Typ: policy-violation — Bei Alarmsichtung Streamablauf / ACLs überprüfen.
+alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"RTSP RECORD (Publish) Versuch – möglicher Stream-Hijack"; flow:to_server,established; content:"RECORD "; offset:0; depth:7; nocase; classtype:policy-violation; sid:9000002; rev:1;)
+
+#RTSP-3
+#Beschreibung: SETUP mit Transport: RTP/AVP/TCP — Hinweis auf TCP-interleaved RTP (Firewall-Bypass/fragile Geräte).
+#Typ: attempted-recon — kann auch legitimen Clients gehören; beobachten.
+# Stufe 1: nur markieren, kein Alert (SETUP + RTP/AVP/TCP gesehen)
+alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"RTSP interleaved TCP seen (mark)"; flow:to_server,established;content:"SETUP "; nocase; offset:0; depth:6;content:"Transport:"; nocase;content:"RTP/AVP/TCP"; nocase;flowbits:set,rtsp.tcp_interleaved; flowbits:noalert;sid:9000303; rev:1;)
+
+# Stufe 2: erst bei folgendem PLAY alarmieren
+alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"RTSP SETUP mit interleaved TCP (RTP/AVP/TCP) – aktive Session";flow:to_server,established;flowbits:isset,rtsp.tcp_interleaved;content:"PLAY "; nocase; offset:0; depth:5;classtype:attempted-recon; sid:9000003; rev:2;)
+
+#RTSP-4
+#Beschreibung: Threshold-Regel — viele DESCRIBE in kurzer Zeit → Path-Recon / Scanner erkennen.
+#Typ: attempted-recon (threshold: 5 in 60s).
+alert tcp $EXTERNAL_NET any -> $HOME_NET $RTSP_PORTS (msg:"RTSP Recon: viele DESCRIBE in kurzer Zeit"; flow:to_server,established; content:"DESCRIBE "; offset:0; depth:9; nocase; content:" RTSP/1."; nocase; threshold:type both, track by_src, count 5, seconds 60; classtype:attempted-recon; sid:9000004; rev:1;)
+
+############################################################################
+
+#TELNET-1 (extern)
+#Beschreibung: Externer SYN-Portscan gegen Telnet-Ports (23,2323) — Mirai-ähnliche Scanner.
+#Typ: attempted-recon — Threshold reduziert false positives.
+alert tcp $EXTERNAL_NET any -> $HOME_NET [23,2323] (msg:"IoT Telnet Portscan (source external) (Mirai)"; flags:S; threshold: type both, track by_src, count 5, seconds 60; reference:url,extremenetworks.com/blogs/detecting-mirai-botnet-scans; classtype:attempted-recon; sid:9000011; rev:1;)
+
+#TELNET-2
+#Beschreibung: Telnet-Login-Versuche mit Standardbenutzer "root" / Passwort-Prompt — deutet auf Brute-Force / Default-Pw-Scans hin.
+#Typ: attempted-admin — reagiert auf typische Login-Prompts.
+alert tcp $EXTERNAL_NET any -> $HOME_NET [23,2323] (msg:"IoT Telnet Login Brute-Force/Default-Kennwort"; flow:to_server, established; content:"root"; content:"Password:"; classtype:attempted-admin; sid:9000012; rev:11;)
+
+#TELNET-3 (DVR Backdoor)
+#Beschreibung: Erkennung von Zugriffen auf bekannte DVR-/Backdoor-Pfade (/shell) — CVE-Referenz vorhanden.
+#Typ: attempted-admin — prüfen ob Gerät betroffen ist (CVE-2016-20016).
+alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (msg:"MVPower DVR Backdoor-Zugriff (/shell)"; flow:to_server, established; http.uri; content:"/shell"; reference:cve,2016-20016; classtype:attempted-admin; sid:9000013; rev:2;)
+
+#TELNET-4 (intern)
+#Beschreibung: Ausgehende SYNs aus dem internen Netz an Telnet-Ports — IoT-Geräte, die Scans starten (Mirai).
+#Typ: attempted-recon — Catch-hostside scanning behavior.
+alert tcp $HOME_NET any -> $HOME_NET [23,2323] (msg:"IoT Telnet Portscan (source internal) (Mirai)"; flags:S; threshold: type both, track by_src, count 5, seconds 60; reference:url,extremenetworks.com/blogs/detecting-mirai-botnet-scans; classtype:attempted-recon; sid:9000014; rev:1;)
+
+#TELNET-5
+#Beschreibung: UDP-Flooding durch IoT-Gerät → DDoS-Bot-Indikator (hohe Sendefrequenz).
+#Typ: attempted-dos — hoher Threshold (100/s).
+alert udp $HOME_NET any -> $EXTERNAL_NET any (msg:"IoT moeglicher UDP-Flood (DDoS-Bot)"; threshold: type both, track by_src, count 100, seconds 1; reference:url,extremenetworks.com/blogs/detecting-mirai-botnet-scans; classtype:attempted-dos; sid:9000015; rev:1;)
+
+#TELNET-6
+#Beschreibung: Internes Portscanning (SYN) durch IoT-Geräte — interne reconnaissance detection.
+#Typ: attempted-recon — default threshold: 10 innerhalb 60s.
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"Internes Portscan durch IoT-Geraet"; flags:S; threshold: type both, track by_src, count 10, seconds 60; classtype:attempted-recon; sid:9000016; rev:1;)
+
+#TELNET-7
+#Beschreibung: Erkennung von HTTP/HTTPS/FTP-Downloads typischer "Malware"-Binaries (.sh/.bin) von IoT-Geräten.
+#Typ: trojan-activity — prüft HTTP-Request-Linie / Host-Header.
+alert tcp $HOME_NET any -> $EXTERNAL_NET [80,443,21] (msg:"IoT Malware-Download (verdächtige Datei)"; flow:to_server; content:".sh HTTP/1.1"; nocase; content:"Host: "; distance:0; within:50; reference:url,cujo.com/blog/iot-botnet-report; classtype:trojan-activity; sid:9000017; rev:1;)
+
+############################################################################
+
+#ROUTER-1
+#Beschreibung: D-Link login.cgi Command Injection — CVE-2016-20017 (cli=... mit ; oder &).
+#Typ: web-application-attack — hohe Priorität bei öffentlichen Zugriffen.
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"D-Link DSL-2750B login.cgi Command Injection";flow:to_server;content:"/login.cgi?";http.uri;pcre:"/cli=.*(?:\;|%3[Bb]|%26)/U";reference:url,www.cvedetails.com/cve/CVE-2016-20017;classtype:web-application-attack;sid:9000021;rev:13;)
+
+#ROUTER-2
+#Beschreibung: GPON ?images Auth-Bypass – bekannte Schwachstelle (Auth bypass via images parameter).
+#Typ: attempted-admin — prüfe ob Router durch diese Anfrage Inhalte preisgibt.
+alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (msg:"Dasan GPON Auth-Bypass ?images"; flow:to_server; http.uri; content:"?images"; nocase; reference:cve,2018-10561; classtype:attempted-admin; sid:9000022; rev:1;)
+
+#ROUTER-3
+#Beschreibung: TR-064 NewNTPServer SOAP Payload mit http:// — mögliche Shell-Injection über NTP-Server-Eintrag.
+#Typ: attempted-admin — CVE-typisches Muster (NewNTPServer + URL).
+alert tcp $EXTERNAL_NET any -> $HOME_NET 7547 (msg:"TR-064 NewNTPServer Command Injection"; flow:to_server, established; content:"NewNTPServer"; nocase; content:"http://"; distance:0; classtype:attempted-admin; sid:9000023; rev:2;)
+
+#ROUTER-4
+#Beschreibung: Externes SSDP M-SEARCH → UPnP discovery scans / Amplification attempts.
+#Typ: attempted-recon — Detektion von M-SEARCH Requests.
+alert udp $EXTERNAL_NET any -> $HOME_NET 1900 (msg:"Externes SSDP M-SEARCH (UPnP-Scan)"; content:"M-SEARCH * HTTP/1.1"; nocase; classtype:attempted-recon; sid:9000024; rev:1;)
+
+#ROUTER-5
+#Beschreibung: 
+#Typ: 
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"IoT-Router – TOTOLINK DownloadFlile.cgi Command Injection (CVE-2022-25075)";flow:to_server,established;http_request_line; content:"/cgi-bin/downloadFlile.cgi";http_request_line; content:"payload=";pkt_data; pcre:"/payload=(?:.*(?:\x3B|\x60|%60))/Ui";classtype:attempted-admin; sid:9000025; rev:2;)
+
+
+#ROUTER-6
+#Beschreibung: 
+#Typ: 
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"TP-Link AX21 - luci POST path seen (CVE-2023-1389)";flow:to_server,established;content:"POST /cgi-bin/luci/|3B|stok="; http_request_line;content:"/locale?form=country"; http_request_line;reference:cve,2023-1389;classtype:attempted-admin; sid:1000500; rev:1;)
+
+############################################################################
+
+#CAM-1
+#Beschreibung: HTTP Basic Auth mit Base64 "admin:admin" → Default-Passwort-Erkennung.
+#Typ: attempted-admin — zeigt ungeänderte Standard-Credentials.
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"IoT Web-Login mit Default-Passwort (BasicAuth)"; flow:to_server, established; content:"Authorization: Basic "; content:"YWRtaW46YWRtaW4="; reference:cve,2017-17106; classtype:attempted-admin; sid:9000031; rev:1;)
+
+#CAM-2
+#Beschreibung: Download /system.ini ohne Auth — Konfigurations-Leak (häufig sensitiver Inhalt).
+#Typ: attempted-recon — erkennt GET auf system.ini.
+alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (msg:"IP-Cam Config Leak (system.ini Download)"; flow:to_server; content:"GET system.ini HTTP/1.1"; nocase; reference:cve,2017-5674; classtype:attempted-recon; sid:9000032; rev:1;)
+
+#CAM-3
+#Beschreibung: Mehrfache HTTP 401 Antworten (von Host ausgehend) → mögliche Bruteforce-Versuche.
+#Typ: attempted-user — Threshold: 5x 401 in 120s.
+alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"Mehrfache HTTP-Auth-Fehler - Bruteforce moeglich"; flow:to_client; content:"HTTP/1.1 401"; flowbits:set,auth.fail; threshold: type both, track by_src, count 5, seconds 120; classtype:attempted-user; sid:9000033; rev:1;)
+
+#CAM-4 / CAM-7 (FLIR AX8 res.php)
+#Beschreibung: POST /res.php mit action=alarm und id=...;... → Pattern für semikolon-getriggerte Command-Injection (CVE-2022-37061).
+#Typ: attempted-admin — sehr heikel: Semikolon in id-Parameter detektiert.
+alert tcp $EXTERNAL_NET any -> $HOME_NET any (msg:"IoT RCE-Versuch FLIR AX8 (res.php Alarm) CVE-2022-37061"; flow:to_server, established; http.uri; content:"/res.php"; http.request_body; content:"action=alarm"; http.request_body; pcre:"/id=[0-9]+\x3B.+/"; classtype:attempted-admin; sid:9000034; rev:1;)
+
+#CAM-5 (ABUS wireless_mft)
+#Beschreibung: WLAN-API-Parameter mit Semikolon/Backtick → mögliche Befehlsinjektion (CVE-2023-26609).
+#Typ: attempted-admin.
+alert http $EXTERNAL_NET any -> $HOME_NET any (msg:"IoT RCE-Versuch ABUS Kamera (wireless_mft) CVE-2023-26609"; http.uri; content:"/cgi-bin/mft/wireless_mft"; http.request_body; pcre:"/ap=.*[\x3B`]/"; classtype:attempted-admin; sid:9000035; rev:1;)
+
+#CAM-6 (Dahua ONVIF)
+#Beschreibung: ONVIF CreateUsers + UsernameToken Replay → erkennung von SOAP-Bodies mit CreateUsers/UsernameToken (CVE-2022-30563).
+#Typ: attempted-admin.
+alert tcp $EXTERNAL_NET any -> $HOME_NET 80 (msg:"IoT-Kamera – ONVIF WS-UsernameToken Replay-Angriff (CVE-2022-30563)"; flow: established, to_server; content: "POST"; http_method; content: "/onvif"; http_uri; content: "<CreateUsers"; http_client_body; content: "UsernameToken"; http_client_body; classtype:attempted-admin; sid:9000036; rev:1;)
+
+############################################################################
+
+#MQTT-1 (extern)
+#Beschreibung: Externe Verbindungs-/Publish-/Subscribeversuche auf 1883 — Scanner / offene Broker.
+#Typ: attempted-recon.
+alert tcp $EXTERNAL_NET any -> $HOME_NET 1883 (msg:"Externer MQTT-Zugriff/Scan"; flags:S; classtype:attempted-recon; sid:9000041; rev:1;)
+
+#MQTT-2
+#Beschreibung: MQTT Connect-Flood ausgehend vom Broker/Host — DoS/BruteForce-Muster (mehrere Verbindungen in kurzer Zeit).
+#Typ: attempted-dos — threshold 10 in 60s.
+alert tcp $HOME_NET 1883 -> $HOME_NET any (msg:"MQTT Connect Flood/Bruteforce"; flow:to_server; threshold:type both, track by_src, count 10, seconds 60; classtype:attempted-dos; sid:9000042; rev:2;)
+
+#MQTT-3
+#Beschreibung: Publish-Flood (viele PUBLISH-Pakete innerhalb kurzer Zeit).
+#Typ: attempted-dos — threshold 100 in 60s.
+alert tcp $HOME_NET any -> $HOME_NET 1883 (msg:"MQTT Publish Flood"; flow:to_server; mqtt.type:publish; threshold: type both, track by_src, count 100, seconds 60; classtype:attempted-dos; sid:9000043; rev:1;)
+
+#MQTT-4
+#Beschreibung: Protocol-Anomalie / malformed MQTT packet — mögliches Exploit/Scanner.
+#Typ: protocol-command-decode.
+alert tcp $EXTERNAL_NET any -> $HOME_NET 1883 (msg:"MQTT Protokoll-Anomalie (moeglicher Exploit)"; flow:to_server; classtype:protocol-command-decode; sid:9000044; rev:2;)
+
+#COAP-1
+#Beschreibung: Unerwarteter CoAP Traffic auf 5683 (external -> internal). Erkennung anhand CoAP-Headerbytes "COAP".
+#Typ: attempted-recon.
+alert udp $EXTERNAL_NET any -> $HOME_NET 5683 (msg:"External CoAP Scan"; content:"|43 4F 41 50|"; depth:4; offset:0; sid:9000045; rev:3;)
+
+#COAP-2
+#Beschreibung: 
+#Typ:
+alert tcp $HOME_NET any -> $HOME_NET 1883 (msg:"IoT-Lampe – Unauth. MQTT Debug-Befehl (CVE-2022-47758)"; flow: to_server; content: "ACME/device/"; depth: 12; content: "/exec/server"; within: 20; distance: 0; content: "debug "; within: 6; distance: 0; reference:cve,2022-47758; classtype:attempted-admin; sid:9000046; rev:1;)
+
+############################################################################
+
+#SSDP Response nach extern
+#Beschreibung: Host sendet SSDP HTTP/1.1 200 OK nach extern → mögliches Amplification-Response
+alert udp $HOME_NET 1900 -> $EXTERNAL_NET any (msg:"SSDP Response nach extern (moegl. Amplification)"; content:"HTTP/1.1 200 OK"; nocase; content:"upnp:rootdevice"; nocase; classtype:attempted-dos; sid:9000051; rev:1;)
+
+#Beschreibung: 
+#Typ:
+alert tcp $EXTERNAL_NET any -> $HOME_NET [23,2323] (msg:"Einzelner Telnet-Portscan"; flags:S; classtype:attempted-recon; sid:9000052; rev:1;)

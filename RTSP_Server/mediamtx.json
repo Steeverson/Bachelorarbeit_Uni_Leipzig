@@ -1,0 +1,8 @@
+{
+  "logLevel": "info",
+  "rtspAddress": ":8554",
+  "paths": {
+    "stream":  { "source": "publisher" },
+    "stream1": { "source": "publisher" }
+  }
+}
