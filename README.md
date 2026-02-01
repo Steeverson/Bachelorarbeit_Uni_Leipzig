@@ -6,7 +6,7 @@
 - Auf VM Docker installiert
 
 ## Herunterladen der vorbereiteten Virtuellen Maschine:
-Alternativ kann eine vorbereitete OVA Datei unter: 
+Alternativ kann eine vorbereitete OVA Datei unter: https://www.dropbox.com/scl/fi/zw7dj1vekig6i21qj72b2/BA-VM.ova?rlkey=my3w2bvk22viwut7p9y97i0ru&st=6w9dc9st&dl=0
 heruntergeladen werden. Diese ist vorkonfiguriert und kann in Virtual Box importiert werden.
 
 Benutzername: BAUser
